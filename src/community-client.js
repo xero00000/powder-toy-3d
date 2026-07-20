@@ -1,7 +1,11 @@
 // SPDX-License-Identifier: GPL-3.0-or-later
 
 const API_ROOT = "/community-api";
+const OFFICIAL_API_ORIGIN = "https://powdertoy.co.uk";
+const OFFICIAL_STATIC_ORIGIN = "https://static.powdertoy.co.uk";
+const PUBLIC_READER_ORIGIN = "https://r.jina.ai";
 const MAX_PAGE_SIZE = 60;
+let communityTransportOverride = null;
 
 export class CommunityError extends Error {
   constructor(message, status = 0, details = null) {
@@ -10,6 +14,32 @@ export class CommunityError extends Error {
     this.status = status;
     this.details = details;
   }
+}
+
+function inferredCommunityTransport() {
+  const configured = globalThis.__POWDER3_COMMUNITY_MODE__;
+  if (configured === "local" || configured === "hosted") return configured;
+  return globalThis.location?.hostname?.endsWith(".github.io") ? "hosted" : "local";
+}
+
+function communityTransport() {
+  return communityTransportOverride ?? inferredCommunityTransport();
+}
+
+export function configureCommunityTransport(mode = null) {
+  if (mode !== null && mode !== "local" && mode !== "hosted") throw new TypeError("community transport must be local, hosted or null");
+  communityTransportOverride = mode;
+}
+
+export function getCommunityCapabilities() {
+  const mode = communityTransport();
+  return Object.freeze({
+    mode,
+    livePublicReads: true,
+    accounts: mode === "local",
+    directLoad: mode === "local",
+    source: "powdertoy.co.uk",
+  });
 }
 
 function integer(value, name, minimum, maximum) {
@@ -49,12 +79,68 @@ function authRecord(auth) {
   };
 }
 
+function officialPublicRequest(path) {
+  const request = new URL(path, "https://powder3.invalid");
+  const saveMatch = request.pathname.match(/^\/saves\/(\d+)(?:\/(comments))?$/u);
+  const profileMatch = request.pathname.match(/^\/profiles\/([^/]+)$/u);
+  if (request.pathname === "/startup") return new URL("/Startup.json", OFFICIAL_API_ORIGIN);
+  if (request.pathname === "/saves") {
+    const upstream = new URL("/Browse.json", OFFICIAL_API_ORIGIN);
+    upstream.searchParams.set("Start", request.searchParams.get("start") || "0");
+    upstream.searchParams.set("Count", request.searchParams.get("count") || "24");
+    if (request.searchParams.get("q")) upstream.searchParams.set("Search_Query", request.searchParams.get("q"));
+    return upstream;
+  }
+  if (request.pathname === "/tags") {
+    const upstream = new URL("/Browse/Tags.json", OFFICIAL_API_ORIGIN);
+    upstream.searchParams.set("Start", request.searchParams.get("start") || "0");
+    upstream.searchParams.set("Count", request.searchParams.get("count") || "24");
+    if (request.searchParams.get("q")) upstream.searchParams.set("Search_Query", request.searchParams.get("q"));
+    return upstream;
+  }
+  if (profileMatch) {
+    const upstream = new URL("/User.json", OFFICIAL_API_ORIGIN);
+    upstream.searchParams.set("Name", decodeURIComponent(profileMatch[1]));
+    return upstream;
+  }
+  if (saveMatch) {
+    const id = saveMatch[1];
+    const upstream = new URL(saveMatch[2] ? "/Browse/Comments.json" : "/Browse/View.json", OFFICIAL_API_ORIGIN);
+    upstream.searchParams.set("ID", id);
+    if (request.searchParams.get("date")) upstream.searchParams.set("Date", request.searchParams.get("date"));
+    if (saveMatch[2]) {
+      upstream.searchParams.set("Start", request.searchParams.get("start") || "0");
+      upstream.searchParams.set("Count", request.searchParams.get("count") || "40");
+    }
+    return upstream;
+  }
+  throw new CommunityError("This community action requires the local secure gateway", 503);
+}
+
+function readerJson(textValue) {
+  const marker = "\nMarkdown Content:\n";
+  const markerIndex = textValue.indexOf(marker);
+  let payload = (markerIndex >= 0 ? textValue.slice(markerIndex + marker.length) : textValue).trim();
+  if (payload.startsWith("```")) payload = payload.replace(/^```(?:json)?\s*/u, "").replace(/\s*```$/u, "");
+  try { return JSON.parse(payload); }
+  catch { throw new CommunityError("The live community bridge returned an invalid response", 502); }
+}
+
 async function apiFetch(path, options = {}) {
   const { binary = false, textResponse = false, ...fetchOptions } = options;
-  const response = await fetch(`${API_ROOT}${path}`, {
+  const hosted = communityTransport() === "hosted";
+  if (hosted && (fetchOptions.method || "GET") !== "GET") {
+    throw new CommunityError("Sign-in and community write actions require the local secure gateway", 503);
+  }
+  if (hosted && binary) {
+    throw new CommunityError("Use the official CPS download on the hosted build", 503);
+  }
+  const upstream = hosted ? officialPublicRequest(path) : null;
+  const requestUrl = hosted ? `${PUBLIC_READER_ORIGIN}/${upstream.href}` : `${API_ROOT}${path}`;
+  const response = await fetch(requestUrl, {
     ...fetchOptions,
     headers: {
-      Accept: binary ? "application/octet-stream" : "application/json",
+      Accept: hosted ? "text/plain" : binary ? "application/octet-stream" : "application/json",
       ...(options.body ? { "Content-Type": "application/json" } : {}),
       ...options.headers,
     },
@@ -62,6 +148,7 @@ async function apiFetch(path, options = {}) {
   if (response.ok) {
     if (binary) return new Uint8Array(await response.arrayBuffer());
     if (textResponse) return response.text();
+    if (hosted) return readerJson(await response.text());
     return response.json();
   }
   let details = null;
@@ -70,8 +157,10 @@ async function apiFetch(path, options = {}) {
 }
 
 export function communityThumbnailUrl(id, date = 0) {
-  const query = date ? `?date=${integer(date, "save date", 1, 9_999_999_999)}` : "";
-  return `${API_ROOT}/saves/${saveId(id)}/thumbnail${query}`;
+  const cleanId = saveId(id);
+  const cleanDate = date ? integer(date, "save date", 1, 9_999_999_999) : 0;
+  if (communityTransport() === "hosted") return `${OFFICIAL_STATIC_ORIGIN}/${cleanId}${cleanDate ? `_${cleanDate}` : ""}_small.png`;
+  return `${API_ROOT}/saves/${cleanId}/thumbnail${cleanDate ? `?date=${cleanDate}` : ""}`;
 }
 
 export function communityWebsiteUrl(id) {
@@ -81,7 +170,14 @@ export function communityWebsiteUrl(id) {
 export function communityAvatarUrl(username, size = 0) {
   const cleanUsername = text(username, "username", 64, false);
   const cleanSize = integer(size, "avatar size", 0, 256);
+  if (communityTransport() === "hosted") return `${OFFICIAL_STATIC_ORIGIN}/avatars/${encodeURIComponent(cleanUsername)}${cleanSize ? `.${cleanSize}` : ""}.png`;
   return `${API_ROOT}/profiles/${encodeURIComponent(cleanUsername)}/avatar${cleanSize ? `?size=${cleanSize}` : ""}`;
+}
+
+export function communitySaveDownloadUrl(id, date = 0) {
+  const cleanId = saveId(id);
+  const cleanDate = date ? integer(date, "save date", 1, 9_999_999_999) : 0;
+  return `${OFFICIAL_STATIC_ORIGIN}/${cleanId}${cleanDate ? `_${cleanDate}` : ""}.cps`;
 }
 
 function remoteText(value, maximum) {

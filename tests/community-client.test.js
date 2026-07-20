@@ -3,9 +3,10 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import {
-  commentOnCommunitySave, communityAvatarUrl, communityThumbnailUrl, communityWebsiteUrl,
+  commentOnCommunitySave, communityAvatarUrl, communitySaveDownloadUrl, communityThumbnailUrl, communityWebsiteUrl,
+  configureCommunityTransport,
   deleteCommunitySave, downloadCommunitySave, editCommunityTag, favouriteCommunitySave,
-  getCommunityComments, getCommunityProfile, getCommunitySave, getCommunityStartup, loginCommunity,
+  getCommunityCapabilities, getCommunityComments, getCommunityProfile, getCommunitySave, getCommunityStartup, loginCommunity,
   reportCommunitySave, searchCommunitySaves, searchCommunityTags, setCommunitySavePublished, voteCommunitySave,
   updateCommunityProfile, uploadCommunitySave,
 } from "../src/community-client.js";
@@ -18,6 +19,10 @@ function withFetch(handler, run) {
 
 function jsonResponse(value, status = 200) {
   return new Response(JSON.stringify(value), { status, headers: { "Content-Type": "application/json" } });
+}
+
+function readerResponse(value, status = 200) {
+  return new Response(`Title: Powder Toy API\n\nURL Source: https://powdertoy.co.uk/\n\nMarkdown Content:\n${JSON.stringify(value)}`, { status });
 }
 
 test("community read client maps strict local endpoints", async () => {
@@ -44,6 +49,44 @@ test("community read client maps strict local endpoints", async () => {
   assert.equal(requests[4].url, "/community-api/saves/7/data");
   assert.equal(communityThumbnailUrl(7, 100), "/community-api/saves/7/thumbnail?date=100");
   assert.equal(communityWebsiteUrl(7), "https://powdertoy.co.uk/Browse/View.html?ID=7");
+});
+
+test("hosted community transport reads official public data without exposing account actions", async () => {
+  const requests = [];
+  configureCommunityTransport("hosted");
+  try {
+    await withFetch(async (url, options = {}) => {
+      requests.push({ url: String(url), options });
+      if (String(url).includes("Browse.json")) return readerResponse({ Count: 1, Saves: [{ ID: 3402000, Name: "Live save" }] });
+      if (String(url).includes("View.json")) return readerResponse({ ID: 3402000, Name: "Live save" });
+      if (String(url).includes("Comments.json")) return readerResponse([{ Username: "alice", Text: "Great" }]);
+      if (String(url).includes("User.json")) return readerResponse({ User: { Username: "alice" } });
+      return readerResponse({ Session: false, MessageOfTheDay: "Live MotD" });
+    }, async () => {
+      assert.deepEqual(await searchCommunitySaves({ start: 12, count: 6, query: "reactor" }), {
+        total: 1, saves: [{ ID: 3402000, Name: "Live save" }],
+      });
+      assert.equal((await getCommunitySave(3402000)).Name, "Live save");
+      assert.equal((await getCommunityComments(3402000)).at(0).Text, "Great");
+      assert.equal((await getCommunityProfile("alice")).Username, "alice");
+      assert.equal((await getCommunityStartup()).messageOfTheDay, "Live MotD");
+      await assert.rejects(loginCommunity("alice", "secret"), /local secure gateway/u);
+      await assert.rejects(downloadCommunitySave(3402000), /official CPS download/u);
+    });
+    assert.equal(getCommunityCapabilities().mode, "hosted");
+    assert.equal(getCommunityCapabilities().accounts, false);
+    assert.equal(getCommunityCapabilities().directLoad, false);
+    assert.match(requests[0].url, /^https:\/\/r\.jina\.ai\/https:\/\/powdertoy\.co\.uk\/Browse\.json\?/u);
+    assert.match(requests[0].url, /Start=12/u);
+    assert.match(requests[0].url, /Count=6/u);
+    assert.match(requests[0].url, /Search_Query=reactor/u);
+    assert.equal(requests.every(({ options }) => (options.method || "GET") === "GET"), true);
+    assert.equal(communityThumbnailUrl(3402000, 123), "https://static.powdertoy.co.uk/3402000_123_small.png");
+    assert.equal(communityAvatarUrl("alice", 128), "https://static.powdertoy.co.uk/avatars/alice.128.png");
+    assert.equal(communitySaveDownloadUrl(3402000, 123), "https://static.powdertoy.co.uk/3402000_123.cps");
+  } finally {
+    configureCommunityTransport(null);
+  }
 });
 
 test("community upload client sends bounded OPS data and parses the returned save ID", async () => {

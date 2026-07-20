@@ -13,9 +13,9 @@ import {
   materialsInCategory,
 } from "./materials.js";
 import {
-  commentOnCommunitySave, communityAvatarUrl, communityThumbnailUrl, communityWebsiteUrl,
+  commentOnCommunitySave, communityAvatarUrl, communitySaveDownloadUrl, communityThumbnailUrl, communityWebsiteUrl,
   deleteCommunitySave, downloadCommunitySave, editCommunityTag, favouriteCommunitySave,
-  getCommunityComments, getCommunityProfile, getCommunitySave, getCommunityStartup, loginCommunity,
+  getCommunityCapabilities, getCommunityComments, getCommunityProfile, getCommunitySave, getCommunityStartup, loginCommunity,
   reportCommunitySave, searchCommunitySaves, setCommunitySavePublished, updateCommunityProfile,
   uploadCommunitySave, voteCommunitySave,
 } from "./community-client.js";
@@ -26,6 +26,7 @@ const simulation = new VoxelSimulation(48, 36, 28);
 simulation.loadPreset("foundry");
 const matterRenderer = new MatterRenderer(canvas, simulation);
 const soundscape = new Soundscape();
+const communityCapabilities = getCommunityCapabilities();
 
 const DECORATION_TOOLS = Object.freeze([
   { id: DECORATION_MODE.DRAW, code: "SET", name: "Set", description: "Draw decoration with no blending." },
@@ -58,6 +59,7 @@ const state = {
   propertyValue: 22,
   propertyValid: true,
   erasing: false,
+  touchNavigation: false,
   radius: 2,
   brushShape: "sphere",
   paused: false,
@@ -697,6 +699,11 @@ function setSignOpen(cell) {
 }
 
 canvas.addEventListener("pointermove", (event) => {
+  if (state.touchNavigation && event.pointerType === "touch") {
+    state.currentCell = null;
+    matterRenderer.updateCursor(null);
+    return;
+  }
   const cell = matterRenderer.pickCell(event.clientX, event.clientY);
   state.currentCell = cell;
   matterRenderer.updateCursor(cell, state.radius, currentPaletteItem().color || 0xbff7ff);
@@ -711,6 +718,11 @@ canvas.addEventListener("pointermove", (event) => {
 
 canvas.addEventListener("pointerdown", (event) => {
   if (event.button !== 0) return;
+  if (state.touchNavigation && event.pointerType === "touch") {
+    state.drawing = false;
+    matterRenderer.updateCursor(null);
+    return;
+  }
   event.preventDefault();
   const cell = matterRenderer.pickCell(event.clientX, event.clientY);
   state.currentCell = cell;
@@ -748,6 +760,7 @@ canvas.addEventListener("pointerdown", (event) => {
 
 canvas.addEventListener("pointerup", (event) => {
   if (event.button !== 0) return;
+  if (state.touchNavigation && event.pointerType === "touch") return;
   const cell = matterRenderer.pickCell(event.clientX, event.clientY) ?? state.currentCell;
   if (state.drawing && state.drawMode === "line") paintLine(state.dragStart, cell);
   else if (state.drawing && state.drawMode === "box") paintBox(state.dragStart, cell);
@@ -770,6 +783,13 @@ canvas.addEventListener("pointerleave", () => {
   if (!state.drawing) matterRenderer.updateCursor(null);
 });
 
+canvas.addEventListener("pointercancel", (event) => {
+  state.drawing = false;
+  state.lastPaintCell = null;
+  state.dragStart = null;
+  if (canvas.hasPointerCapture(event.pointerId)) canvas.releasePointerCapture(event.pointerId);
+});
+
 canvas.addEventListener("contextmenu", (event) => event.preventDefault());
 canvas.addEventListener("wheel", (event) => {
   if (event.altKey || event.ctrlKey) return;
@@ -777,6 +797,42 @@ canvas.addEventListener("wheel", (event) => {
   event.stopImmediatePropagation();
   updateRadius(state.radius + (event.deltaY > 0 ? -1 : 1));
 }, { passive: false, capture: true });
+
+const mobileLayoutQuery = window.matchMedia("(max-width: 760px)");
+function setMobilePanel(panel = null) {
+  const next = mobileLayoutQuery.matches && ["materials", "inspector"].includes(panel) ? panel : null;
+  if (next) document.documentElement.dataset.mobilePanel = next;
+  else delete document.documentElement.dataset.mobilePanel;
+  $("#mobileMaterialsButton").setAttribute("aria-expanded", String(next === "materials"));
+  $("#mobileInspectorButton").setAttribute("aria-expanded", String(next === "inspector"));
+  $("#mobilePanelScrim").hidden = !next;
+}
+
+function setTouchNavigation(enabled, { announce = true } = {}) {
+  state.touchNavigation = Boolean(enabled);
+  matterRenderer.setTouchNavigation(state.touchNavigation);
+  const button = $("#touchModeButton");
+  button.classList.toggle("active", state.touchNavigation);
+  button.setAttribute("aria-pressed", String(state.touchNavigation));
+  button.querySelector("strong").textContent = state.touchNavigation ? "ORBIT" : "DRAW";
+  canvas.classList.toggle("touch-orbit", state.touchNavigation);
+  if (announce) showToast(state.touchNavigation ? "TOUCH ORBIT · DRAG TO ROTATE · PINCH TO ZOOM" : "TOUCH DRAW · TAP OR DRAG TO PAINT", "#67e8ff");
+}
+
+$("#mobileMaterialsButton").addEventListener("click", () => setMobilePanel(document.documentElement.dataset.mobilePanel === "materials" ? null : "materials"));
+$("#mobileInspectorButton").addEventListener("click", () => setMobilePanel(document.documentElement.dataset.mobilePanel === "inspector" ? null : "inspector"));
+$("#closeMobileMaterials").addEventListener("click", () => setMobilePanel());
+$("#closeMobileInspector").addEventListener("click", () => setMobilePanel());
+$("#mobilePanelScrim").addEventListener("click", () => setMobilePanel());
+$("#materialGrid").addEventListener("click", (event) => {
+  if (mobileLayoutQuery.matches && event.target.closest("button")) setMobilePanel();
+});
+$("#touchModeButton").addEventListener("click", () => setTouchNavigation(!state.touchNavigation));
+mobileLayoutQuery.addEventListener("change", (event) => {
+  setMobilePanel();
+  if (!event.matches) setTouchNavigation(false, { announce: false });
+});
+setTouchNavigation(false, { announce: false });
 
 $("#pauseButton").addEventListener("click", () => togglePause());
 $("#stepButton").addEventListener("click", singleStep);
@@ -1422,7 +1478,7 @@ const startupCommunityState = {
 };
 try {
   const storedAuth = JSON.parse(sessionStorage.getItem(COMMUNITY_AUTH_KEY) ?? "null");
-  if (storedAuth && Number.isSafeInteger(Number(storedAuth.userId)) && storedAuth.sessionId && storedAuth.sessionKey) communityState.auth = storedAuth;
+  if (communityCapabilities.accounts && storedAuth && Number.isSafeInteger(Number(storedAuth.userId)) && storedAuth.sessionId && storedAuth.sessionKey) communityState.auth = storedAuth;
 } catch { /* invalid or unavailable session storage starts as guest */ }
 
 function communityElement(tag, className = "", text = "") {
@@ -1553,10 +1609,17 @@ function setCommunityBusy(busy, label = "Contacting the official server…") {
 
 function updateCommunityAccountUi() {
   const auth = communityState.auth;
+  const hostedReadOnly = !communityCapabilities.accounts;
   const author = String(communityState.detail?.Username || communityState.selected?.Username || "").trim().toLocaleLowerCase();
   const ownsSave = Boolean(auth?.username && author && auth.username.trim().toLocaleLowerCase() === author);
-  $("#communityAccountLabel").textContent = auth ? `SIGNED IN · ${auth.username || `USER ${auth.userId}`}` : "READ-ONLY GUEST";
+  $("#communityTransportBadge").textContent = hostedReadOnly ? "LIVE OFFICIAL DATA" : "LOCAL SECURE GATEWAY";
+  $("#communityTransportBadge").title = hostedReadOnly
+    ? "Public metadata is read live from powdertoy.co.uk through a read-only CORS bridge. No credentials are sent."
+    : "The local allowlisted gateway supports official account and upload actions.";
+  $("#communityAccountLabel").textContent = auth ? `SIGNED IN · ${auth.username || `USER ${auth.userId}`}` : hostedReadOnly ? "HOSTED · READ ONLY" : "READ-ONLY GUEST";
   $("#communityLoginToggle").textContent = auth ? "Sign out" : "Sign in";
+  $("#communityLoginToggle").hidden = hostedReadOnly;
+  $("#communityUploadToggle").hidden = hostedReadOnly;
   $("#communityProfileToggle").hidden = !auth?.username;
   $("#communityUploadSubmit").disabled = !auth;
   $("#communityUploadSubmit").title = auth ? "Upload to the official server" : "Sign in before uploading";
@@ -1569,6 +1632,10 @@ function updateCommunityAccountUi() {
   $("#communityCommentForm").hidden = !auth || !communityState.detail;
   $("#communityTagForm").hidden = !auth || !communityState.detail;
   $("#communityOwnerActions").hidden = !ownsSave;
+  $("#communityLoadSave").textContent = communityCapabilities.directLoad ? "Load in 3D" : "Download CPS ↗";
+  $("#communityLoadSave").title = communityCapabilities.directLoad
+    ? "Download and project this official save into the 3D chamber"
+    : "Open the official CPS download. Direct in-app loading requires the local secure gateway.";
   if (ownsSave) {
     const published = communityState.detail?.Published !== false;
     $("#communityPublishSave").hidden = published;
@@ -1611,7 +1678,7 @@ function renderCommunitySaves() {
   $("#communityPageLabel").textContent = `PAGE ${page} / ${pages}`;
   $("#communityPrevious").disabled = communityState.start === 0;
   $("#communityNext").disabled = communityState.start + COMMUNITY_PAGE_SIZE >= communityState.total;
-  $("#communityResultLabel").textContent = `${communityState.total.toLocaleString()} OFFICIAL SAVES · SHOWING ${communityState.saves.length}`;
+  $("#communityResultLabel").textContent = `${communityState.total.toLocaleString()} OFFICIAL SAVES · SHOWING ${communityState.saves.length}${communityCapabilities.mode === "hosted" ? " · LIVE READ-ONLY" : ""}`;
 }
 
 async function refreshCommunityBrowse({ reset = false } = {}) {
@@ -1899,6 +1966,12 @@ $("#communityUploadForm").addEventListener("submit", async (event) => {
 $("#communityLoadSave").addEventListener("click", async () => {
   const id = Number(communityState.detail?.ID || communityState.selected?.ID);
   if (!id) return;
+  if (!communityCapabilities.directLoad) {
+    const date = Number(communityState.selected?.Version || communityState.detail?.Version) || 0;
+    window.open(communitySaveDownloadUrl(id, date), "_blank", "noopener,noreferrer");
+    showToast(`OFFICIAL SAVE #${id} DOWNLOAD OPENED`, "#67e8ff");
+    return;
+  }
   setCommunityBusy(true, "Downloading and projecting save into 3D…");
   try {
     const bytes = await downloadCommunitySave(id);
