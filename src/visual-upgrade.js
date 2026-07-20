@@ -144,6 +144,9 @@ function applySurfaceProfile(material, profile) {
     material.opacity = 0.82;
   }
 
+  material.userData.baseOpacity = material.opacity;
+  material.userData.baseTransparent = material.transparent;
+
   if (!material.isMeshStandardMaterial) {
     material.needsUpdate = true;
     return;
