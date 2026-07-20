@@ -12,7 +12,7 @@ import {
 import { paletteVisibilityMultiplier } from "../src/color-presentation.js";
 import { VoxelSimulation } from "../src/simulation.js";
 
-test("the complete June 2026 upstream element ID space is registered", () => {
+ test("the complete June 2026 upstream element ID space is registered", () => {
   assert.equal(UPSTREAM_ELEMENT_COUNT, 195);
   assert.equal(MATERIALS.length, 195);
   assert.equal(UPSTREAM_VISIBLE_ELEMENT_COUNT, 175);
@@ -32,19 +32,31 @@ test("the generated RGB palette exactly matches the audited upstream revision", 
   assert.ok(MATERIALS.every((material) => material.css === `#${material.color.toString(16).padStart(6, "0")}`));
 });
 
-test("clarity mode preserves every distinct upstream base color", () => {
+test("clarity mode preserves the exact upstream base colors", () => {
   const visible = MATERIALS.filter((material) => material.enabled && material.menuVisible && material.id !== MAT.NONE);
-  const transformedByBase = new Map();
   for (const material of visible) {
     const color = new THREE.Color().setHex(material.color);
     const luminance = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722;
+    assert.equal(paletteVisibilityMultiplier(luminance, "clarity"), 1);
     color.multiplyScalar(paletteVisibilityMultiplier(luminance, "clarity"));
-    const transformed = color.getHex();
-    if (transformedByBase.has(material.color)) assert.equal(transformedByBase.get(material.color), transformed);
-    else transformedByBase.set(material.color, transformed);
+    assert.equal(color.getHex(), material.color, material.code);
   }
   assert.equal(new Set(visible.map((material) => material.color)).size, 156);
-  assert.equal(new Set(transformedByBase.values()).size, transformedByBase.size);
+});
+
+test("matter meshes receive mobile-safe 3D profiles with palette-safe output", () => {
+  const mesh = new THREE.InstancedMesh(
+    new THREE.BoxGeometry(0.92, 0.92, 0.92, 1, 1, 1),
+    new THREE.MeshStandardMaterial({ vertexColors: true }),
+    1,
+  );
+  new THREE.Scene().add(mesh);
+  assert.equal(mesh.userData.visualProfile, "solid");
+  assert.equal(mesh.userData.canonicalPalette, true);
+  assert.equal(mesh.geometry.constructor.name, "RoundedBoxGeometry");
+  assert.equal(mesh.geometry.index, null);
+  assert.ok(mesh.geometry.attributes.position.count > 24);
+  assert.equal(mesh.material.toneMapped, false);
 });
 
 test("the complete upstream tool, wall and built-in Life registries are synchronized", () => {
