@@ -67,6 +67,11 @@ Open `http://127.0.0.1:5173`. You can also use `pnpm dev`, `pnpm build`, and `pn
 
 The GitHub Pages build contains the complete client-side sandbox plus a live, read-only view of the official Powder Toy community: browse, search, previews, save details, tags, comments, profiles, MotD and release metadata all come from `powdertoy.co.uk`. The static host never sends credentials through a third party; account actions and direct in-app CPS import remain available only through the allowlisted same-origin gateway in `scripts/community-proxy.mjs` when running locally. On Pages, the save action opens the official CPS download instead.
 
+<p align="center">
+  <img src="docs/media/powder-toy-3d-mobile-materials.png" width="360" alt="Powder Toy 3D mobile matter library" />
+  <img src="docs/media/powder-toy-3d-mobile-community.png" width="360" alt="Powder Toy 3D mobile browser showing live official community saves" />
+</p>
+
 ## Controls
 
 | Input | Action |
