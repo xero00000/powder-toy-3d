@@ -2,11 +2,14 @@
 
 import test from "node:test";
 import assert from "node:assert/strict";
+import { createHash } from "node:crypto";
+import * as THREE from "three";
 import {
   CATEGORY_ORDER, MATERIALS, MATERIAL_BY_ID, MAT,
   UPSTREAM_ELEMENT_COUNT, UPSTREAM_VISIBLE_ELEMENT_COUNT, UPSTREAM_TOOLS,
   UPSTREAM_WALLS, UPSTREAM_LIFE_RULES, materialsInCategory,
 } from "../src/materials.js";
+import { paletteVisibilityMultiplier } from "../src/color-presentation.js";
 import { VoxelSimulation } from "../src/simulation.js";
 
 test("the complete June 2026 upstream element ID space is registered", () => {
@@ -19,6 +22,29 @@ test("the complete June 2026 upstream element ID space is registered", () => {
   assert.equal(MAT.SEED, 195);
   assert.equal(new Set(MATERIALS.map((material) => material.id)).size, MATERIALS.length);
   assert.ok(MATERIALS.every((material) => material.id >= 0 && material.id <= 255));
+});
+
+test("the generated RGB palette exactly matches the audited upstream revision", () => {
+  const signature = createHash("sha256")
+    .update(MATERIALS.map((material) => `${material.code}:${material.color.toString(16).padStart(6, "0")}`).join("\n"))
+    .digest("hex");
+  assert.equal(signature, "ab52cd294f033bfae23147902ee78dc471539380f5b8e6e6c36f9b35d5ca3c71");
+  assert.ok(MATERIALS.every((material) => material.css === `#${material.color.toString(16).padStart(6, "0")}`));
+});
+
+test("clarity mode preserves every distinct upstream base color", () => {
+  const visible = MATERIALS.filter((material) => material.enabled && material.menuVisible && material.id !== MAT.NONE);
+  const transformedByBase = new Map();
+  for (const material of visible) {
+    const color = new THREE.Color().setHex(material.color);
+    const luminance = color.r * 0.2126 + color.g * 0.7152 + color.b * 0.0722;
+    color.multiplyScalar(paletteVisibilityMultiplier(luminance, "clarity"));
+    const transformed = color.getHex();
+    if (transformedByBase.has(material.color)) assert.equal(transformedByBase.get(material.color), transformed);
+    else transformedByBase.set(material.color, transformed);
+  }
+  assert.equal(new Set(visible.map((material) => material.color)).size, 156);
+  assert.equal(new Set(transformedByBase.values()).size, transformedByBase.size);
 });
 
 test("the complete upstream tool, wall and built-in Life registries are synchronized", () => {

@@ -2297,7 +2297,7 @@ function updateTelemetry(stats) {
 buildCategoryTabs();
 buildPresets();
 syncHistoryButtons();
-matterRenderer.setExposure(2.3);
+matterRenderer.setExposure(1.65);
 matterRenderer.setViewMode("clarity");
 updateRadius(state.radius);
 updateDepth(Math.floor(simulation.depth / 2));
