@@ -4,7 +4,11 @@ import * as THREE from "three";
 import { RoundedBoxGeometry } from "three/addons/geometries/RoundedBoxGeometry.js";
 
 const PATCH_FLAG = Symbol.for("powder-toy-3d.visual-upgrade.v1");
+const LIGHT_RIG_FLAG = Symbol.for("powder-toy-3d.three-point-lighting.v1");
 const LUMA = "vec3(0.2126, 0.7152, 0.0722)";
+const KEY_COLOR = 0xf4fdff;
+const RIM_COLOR = 0x7ca5ff;
+const FILL_COLOR = 0xd9edff;
 
 function near(value, expected, tolerance = 0.025) {
   return Number.isFinite(value) && Math.abs(value - expected) <= tolerance;
@@ -164,7 +168,7 @@ function applySurfaceProfile(material, profile) {
 #ifdef USE_COLOR
   float canonicalLuma = max(dot(vColor, ${LUMA}), 0.018);
   float renderedLuma = dot(max(outgoingLight, vec3(0.0)), ${LUMA});
-  float neutralShade = clamp(renderedLuma / canonicalLuma, 0.58, 1.3);
+  float neutralShade = clamp(renderedLuma / canonicalLuma, 0.68, 1.34);
   neutralShade = mix(1.0, neutralShade, ${shadeAmount});
   outgoingLight = vColor * neutralShade;
 #endif
@@ -172,7 +176,7 @@ function applySurfaceProfile(material, profile) {
 `,
     );
   };
-  material.customProgramCacheKey = () => `${previousCacheKey?.() ?? ""}|canonical-palette-${profile}-v1`;
+  material.customProgramCacheKey = () => `${previousCacheKey?.() ?? ""}|canonical-palette-${profile}-v2`;
   material.needsUpdate = true;
 }
 
@@ -187,11 +191,110 @@ function upgradeMatterMesh(mesh) {
   mesh.userData.canonicalPalette = true;
 }
 
+function lightWithColor(scene, color) {
+  return scene.children.find((child) => child.isDirectionalLight && child.color.getHex() === color);
+}
+
+function lightingLevels(viewMode) {
+  if (["fire", "persistent", "life"].includes(viewMode)) {
+    return { ambient: 1.25, key: 2.6, fill: 1.15, rim: 2.8 };
+  }
+  if (viewMode === "cinematic") {
+    return { ambient: 2.05, key: 4.7, fill: 2.35, rim: 4.15 };
+  }
+  if (viewMode === "clarity") {
+    return { ambient: 4.35, key: 6.4, fill: 4.5, rim: 3.65 };
+  }
+  if (["xray", "heat", "pressure", "velocity", "gravity", "air"].includes(viewMode)) {
+    return { ambient: 4.65, key: 5.2, fill: 3.7, rim: 4.05 };
+  }
+  return { ambient: 4.1, key: 5.8, fill: 3.65, rim: 3.7 };
+}
+
+function placeLight(light, target, forward, right, up, distance, offsets) {
+  light.position.copy(target)
+    .addScaledVector(forward, offsets.forward * distance)
+    .addScaledVector(right, offsets.right * distance)
+    .addScaledVector(up, offsets.up * distance);
+  light.target.position.copy(target);
+}
+
+function updateThreePointLighting(scene, camera) {
+  const rig = scene.userData.threePointLighting;
+  if (!rig || !camera?.isCamera) return;
+
+  const viewMode = globalThis.document?.documentElement?.dataset?.viewMode ?? "clarity";
+  const levels = lightingLevels(viewMode);
+  rig.ambient.intensity = levels.ambient;
+  rig.key.intensity = levels.key;
+  rig.fill.intensity = levels.fill;
+  rig.rim.intensity = levels.rim;
+
+  const target = rig.targetPosition.set(0, -1, 0);
+  const forward = rig.forward.subVectors(target, camera.position);
+  if (forward.lengthSq() < Number.EPSILON) forward.set(0, 0, -1);
+  else forward.normalize();
+
+  const right = rig.right.crossVectors(forward, camera.up);
+  if (right.lengthSq() < Number.EPSILON) right.set(1, 0, 0);
+  else right.normalize();
+  const up = rig.up.crossVectors(right, forward).normalize();
+  const distance = Math.max(30, Math.min(82, camera.position.distanceTo(target)));
+
+  placeLight(rig.key, target, forward, right, up, distance, { forward: -0.58, right: -0.62, up: 0.68 });
+  placeLight(rig.fill, target, forward, right, up, distance, { forward: -0.46, right: 0.72, up: 0.16 });
+  placeLight(rig.rim, target, forward, right, up, distance, { forward: 0.62, right: 0.32, up: 0.54 });
+}
+
+function installThreePointLighting(scene) {
+  if (!scene?.isScene || scene[LIGHT_RIG_FLAG]) return;
+  const ambient = scene.children.find((child) => child.isHemisphereLight);
+  const key = lightWithColor(scene, KEY_COLOR);
+  const rim = lightWithColor(scene, RIM_COLOR);
+  if (!ambient || !key || !rim) return;
+
+  Object.defineProperty(scene, LIGHT_RIG_FLAG, { value: true });
+  key.name = key.name || "MatterKeyLight";
+  rim.name = rim.name || "MatterRimLight";
+
+  const fill = new THREE.DirectionalLight(FILL_COLOR, 4.5);
+  fill.name = "MatterFillLight";
+  fill.castShadow = false;
+
+  for (const light of [key, fill, rim]) {
+    const target = new THREE.Object3D();
+    target.name = `${light.name}Target`;
+    light.target = target;
+    scene.add(target);
+  }
+  scene.add(fill);
+
+  scene.userData.threePointLighting = {
+    cameraRelative: true,
+    ambient,
+    key,
+    fill,
+    rim,
+    targetPosition: new THREE.Vector3(),
+    forward: new THREE.Vector3(),
+    right: new THREE.Vector3(),
+    up: new THREE.Vector3(),
+  };
+
+  const previousBeforeRender = scene.onBeforeRender?.bind(scene);
+  scene.onBeforeRender = (renderer, renderedScene, camera, ...rest) => {
+    updateThreePointLighting(scene, camera);
+    previousBeforeRender?.(renderer, renderedScene, camera, ...rest);
+  };
+}
+
 if (!THREE.Object3D.prototype[PATCH_FLAG]) {
   Object.defineProperty(THREE.Object3D.prototype, PATCH_FLAG, { value: true });
   const originalAdd = THREE.Object3D.prototype.add;
   THREE.Object3D.prototype.add = function addWithVisualProfiles(...objects) {
     for (const object of objects) upgradeMatterMesh(object);
-    return originalAdd.apply(this, objects);
+    const result = originalAdd.apply(this, objects);
+    installThreePointLighting(this);
+    return result;
   };
 }
