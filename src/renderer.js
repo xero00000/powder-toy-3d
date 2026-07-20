@@ -462,6 +462,11 @@ export class MatterRenderer {
     this.composer.addPass(new OutputPass());
   }
 
+  setTouchNavigation(enabled) {
+    this.controls.touches.ONE = enabled ? THREE.TOUCH.ROTATE : null;
+    this.controls.touches.TWO = enabled ? THREE.TOUCH.DOLLY_PAN : null;
+  }
+
   resetCamera(animate = true) {
     const targetPosition = new THREE.Vector3(35, 15, 57);
     if (!animate) {

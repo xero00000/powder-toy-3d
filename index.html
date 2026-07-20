@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="theme-color" content="#05080d" />
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws:;" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https://static.powdertoy.co.uk; connect-src 'self' ws: https://r.jina.ai;" />
     <meta
       name="description"
       content="Powder Toy 3D — a cinematic volumetric falling-sand physics sandbox."
@@ -35,6 +35,12 @@
         </div>
 
         <nav class="top-actions" aria-label="Simulation actions">
+          <button id="mobileMaterialsButton" class="icon-button mobile-only" type="button" aria-controls="materialPanel" aria-expanded="false" title="Open the matter library">
+            <span class="button-icon">◫</span><span class="button-label">Matter</span>
+          </button>
+          <button id="mobileInspectorButton" class="icon-button mobile-only" type="button" aria-controls="inspectorPanel" aria-expanded="false" title="Open chamber controls">
+            <span class="button-icon">⌁</span><span class="button-label">Lab</span>
+          </button>
           <button id="undoButton" class="icon-button" type="button" title="Undo last edit (Ctrl+Z)">
             <span class="button-icon">↶</span><span class="button-label">Undo</span>
           </button>
@@ -69,13 +75,14 @@
         </nav>
       </header>
 
-      <aside class="material-panel glass-panel" aria-label="Material palette">
+      <aside id="materialPanel" class="material-panel glass-panel" aria-label="Material palette">
         <div class="panel-heading">
           <div>
             <span class="eyebrow">Matter library</span>
             <h2 id="libraryTitle">Elements</h2>
           </div>
           <span id="elementCountBadge" class="element-count-badge">175 ELEMENTS</span>
+          <button id="closeMobileMaterials" class="mobile-sheet-close mobile-only" type="button" aria-label="Close matter library">×</button>
         </div>
         <label class="element-search">
           <span aria-hidden="true">⌕</span>
@@ -140,7 +147,8 @@
         </div>
       </main>
 
-      <aside class="inspector-panel glass-panel" aria-label="Simulation telemetry and presets">
+      <aside id="inspectorPanel" class="inspector-panel glass-panel" aria-label="Simulation telemetry and presets">
+        <button id="closeMobileInspector" class="mobile-sheet-close mobile-only" type="button" aria-label="Close chamber controls">×</button>
         <section>
           <div class="panel-heading compact">
             <div><span class="eyebrow">Live telemetry</span><h2>Chamber</h2></div>
@@ -224,6 +232,8 @@
         </section>
       </aside>
 
+      <button id="mobilePanelScrim" class="mobile-panel-scrim" type="button" aria-label="Close mobile panel" hidden></button>
+
       <footer class="control-deck glass-panel">
         <div class="transport-controls">
           <button id="resetButton" class="deck-button" type="button" title="Reset current scenario (R)"><span>↺</span><small>RESET</small></button>
@@ -258,6 +268,11 @@
           <button type="button" data-draw-mode="select" title="Select region for copy, cut and paste (M)"><strong>⌗</strong><small>SELECT</small></button>
           <button type="button" data-draw-mode="sign" title="Place or edit a sign (N)"><strong>▰</strong><small>SIGN</small></button>
         </div>
+
+        <button id="touchModeButton" class="mode-button mobile-only" type="button" aria-pressed="false" title="Switch between drawing and orbiting the camera">
+          <span class="camera-icon"></span>
+          <span><small>TOUCH</small><strong>DRAW</strong></span>
+        </button>
 
         <button id="eraseButton" class="mode-button" type="button">
           <span class="eraser-icon"></span>
@@ -294,6 +309,7 @@
           <header class="community-header">
             <div><span class="eyebrow">Official Powder Toy network</span><h2 id="communityDialogTitle">Community saves</h2></div>
             <div class="community-account-actions">
+              <span id="communityTransportBadge" class="community-transport-badge">LOCAL GATEWAY</span>
               <span id="communityAccountLabel">READ-ONLY GUEST</span>
               <button id="communityProfileToggle" type="button" hidden>Profile</button>
               <button id="communityUploadToggle" type="button">Publish</button>

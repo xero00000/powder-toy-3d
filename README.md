@@ -34,6 +34,7 @@ This repository is an original 3D implementation with audited one-to-one feature
 - Genomic 3D trees: seeds generate and breed inherited colour/branch programs, obey water and gravity, grow phase-changing thick or thin stems, release descendant seeds, photosynthesize, and render genetically distinct foliage.
 - Four authored scenarios: The Foundry, Reactor Breach, Hydro Garden, and Caldera.
 - GPU-instanced rendering, ACES tone mapping, thermal lighting, procedural ambience, camera shake, chamber fog, and a cinematic lab interface. The default clarity view uses a bright 230% exposure, high-key lab lighting, stronger hue-preserving dark-material lift and an enabled section cut; bloom remains available in the cinematic and effects views.
+- A phone-first responsive workspace with full-screen simulation framing, swipeable controls, bottom-sheet matter and chamber panels, safe-area support, 44-pixel touch targets, and a one-tap Draw/Orbit touch-mode switch.
 - Pause, single-step, reset, brush sizing, erase mode, 3D camera orbit, selectable interaction depth, and section-cut inspection.
 - Every legacy rendering family in 3D—basic, fancy, fire, blob, persistent, heat, pressure, velocity, gravity, gradient, Life and alternate air—plus clarity, cinematic, X-ray, section cut and adjustable exposure.
 - Native `.pt3d` save/load, official OPS1/BSON slice or all-depth atlas export, browser-side `.ops`/`.cps` and legacy PSv/fuC `.stm` import, persistent stamps, dynamic in-world signs, bounded undo/redo history, all 19 walls, all 11 tools, and all 24 built-in Life rules.
@@ -64,7 +65,12 @@ pnpm install
 
 Open `http://127.0.0.1:5173`. You can also use `pnpm dev`, `pnpm build`, and `pnpm preview` directly.
 
-The GitHub Pages build contains the complete client-side sandbox. Official community browsing, sign-in, and publishing use the allowlisted same-origin gateway in `scripts/community-proxy.mjs`; those network features require the local development server and are intentionally unavailable on static Pages hosting.
+The GitHub Pages build contains the complete client-side sandbox plus a live, read-only view of the official Powder Toy community: browse, search, previews, save details, tags, comments, profiles, MotD and release metadata all come from `powdertoy.co.uk`. The static host never sends credentials through a third party; account actions and direct in-app CPS import remain available only through the allowlisted same-origin gateway in `scripts/community-proxy.mjs` when running locally. On Pages, the save action opens the official CPS download instead.
+
+<p align="center">
+  <img src="docs/media/powder-toy-3d-mobile-materials.png" width="360" alt="Powder Toy 3D mobile matter library" />
+  <img src="docs/media/powder-toy-3d-mobile-community.png" width="360" alt="Powder Toy 3D mobile browser showing live official community saves" />
+</p>
 
 ## Controls
 
@@ -73,6 +79,8 @@ The GitHub Pages build contains the complete client-side sandbox. Official commu
 | Left mouse | Paint the selected material on the current interaction plane |
 | Right mouse drag | Orbit the 3D camera |
 | Middle mouse / Alt+wheel | Dolly the camera |
+| Touchscreen | Tap or drag to paint; use **Touch Draw/Orbit** to switch to one-finger orbit and two-finger zoom/pan |
+| Mobile **Matter** / **Lab** | Open the bottom-sheet element library or chamber controls |
 | Wheel | Change brush radius |
 | `Space` | Pause or resume |
 | `F` | Advance one simulation tick |
@@ -93,7 +101,7 @@ The depth slider moves both the paint plane and section boundary. With Section C
 - `src/ops-import.js` validates OPS1 containers, decompresses BSON and projects legacy 2D saves into layered 3D without flattening matter/energy overlaps.
 - `src/ops-export.js` writes official OPS1/BSON saves from the current interaction-depth slice or a tiled all-depth atlas, including particle state, walls, fans, fields, signs and simulation settings.
 - `src/psv-import.js` decodes the historical PSv/fuC stamp format, including its field planes and version-specific element migrations.
-- `src/community-client.js` validates and normalizes official browse, detail, profile, account-action and upload responses; `scripts/community-proxy.mjs` supplies a tightly whitelisted same-origin gateway without exposing a general-purpose proxy.
+- `src/community-client.js` validates and normalizes official browse, detail, profile, account-action and upload responses. It automatically selects a live public read transport on GitHub Pages, while `scripts/community-proxy.mjs` supplies the tightly whitelisted same-origin gateway used for direct save import and session-bound account actions locally.
 - `src/renderer.js` maps simulation state into nine physically differentiated instanced material streams plus independent energy, wall, field, trail, actor, SOAP-link and sign passes, then adds camera, chamber, lighting, and post-processing.
 - `src/main.js` owns the fixed-step loop, interaction model, UI state, telemetry, and controls.
 - `src/materials.js` is the material registry and the natural expansion point for additional elements.
