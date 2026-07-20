@@ -10,6 +10,7 @@ import { MATERIAL_BY_ID, MAT, UPSTREAM_LIFE_RULES, UPSTREAM_WALLS } from "./mate
 import { PIPE_FLAG } from "./simulation.js";
 import { formatSignText, parseSignAction } from "./signs.js";
 import { graphicsStyle } from "./graphics-modes.js";
+import { paletteVisibilityMultiplier } from "./color-presentation.js";
 
 const SILICON_COLORS = [
   0x5a6679, 0x6878a1, 0xabbfdd, 0x838490,
@@ -540,9 +541,9 @@ export class MatterRenderer {
     this.scene.background.setHex(background);
     this.scene.fog.color.setHex(background);
     this.scene.fog.density = cinematic ? 0.009 : xray || diagnostic ? 0.0022 : 0.0025;
-    this.ambientLight.intensity = darkLegacy ? 1.15 : cinematic ? 1.65 : clarity ? 6.1 : xray || diagnostic ? 4.6 : 4.8;
-    this.keyLight.intensity = darkLegacy ? 2.2 : cinematic ? 3.4 : clarity ? 7.4 : xray || diagnostic ? 5 : 6.2;
-    this.rimLight.intensity = cinematic ? 2.1 : clarity ? 5.2 : xray || diagnostic ? 4.1 : 4.1;
+    this.ambientLight.intensity = darkLegacy ? 1.15 : cinematic ? 1.65 : clarity ? 2.25 : xray || diagnostic ? 4.6 : 4.8;
+    this.keyLight.intensity = darkLegacy ? 2.2 : cinematic ? 3.4 : clarity ? 4 : xray || diagnostic ? 5 : 6.2;
+    this.rimLight.intensity = cinematic ? 2.1 : clarity ? 2.4 : xray || diagnostic ? 4.1 : 4.1;
     this.baseBloomStrength = this.viewMode === "basic" ? 0.08 : this.viewMode === "fancy" ? 0.86 : darkLegacy ? 1.02 : cinematic ? 0.82 : xray ? 0.35 : diagnostic ? 0.44 : 0.54;
     this.postProcessingEnabled = ["cinematic", "fancy", "fire", "persistent"].includes(this.viewMode);
     const xrayOpacity = { solid: 0.28, powder: 0.64, liquid: 0.52, gas: 0.42 };
@@ -1040,10 +1041,7 @@ export class MatterRenderer {
         this.scratchColor.lerp(this.carriedColor.setHex(decoration & 0xffffff), decorationAlpha);
       }
       const luminance = this.scratchColor.r * 0.2126 + this.scratchColor.g * 0.7152 + this.scratchColor.b * 0.0722;
-      if (this.viewMode === "clarity" && luminance < 0.58) {
-        if (luminance > 0.012) this.scratchColor.multiplyScalar(Math.min(6, 0.58 / luminance));
-        else this.scratchColor.lerp(this.visibilityLift, 0.38);
-      } else if (luminance < 0.32) this.scratchColor.lerp(this.visibilityLift, (0.32 - luminance) * 0.38);
+      this.scratchColor.multiplyScalar(paletteVisibilityMultiplier(luminance, this.viewMode));
       const temperature = temperatures[index];
       const airSample = needsAirSample ? this.simulation.air.sampleVoxel(x, y, z) : null;
       const gravitySample = needsGravitySample ? this.simulation.gravity.sampleVoxel(x, y, z) : null;
