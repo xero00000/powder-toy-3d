@@ -12,7 +12,7 @@ import {
 import { paletteVisibilityMultiplier } from "../src/color-presentation.js";
 import { VoxelSimulation } from "../src/simulation.js";
 
-test("the complete June 2026 upstream element ID space is registered", () => {
+ test("the complete June 2026 upstream element ID space is registered", () => {
   assert.equal(UPSTREAM_ELEMENT_COUNT, 195);
   assert.equal(MATERIALS.length, 195);
   assert.equal(UPSTREAM_VISIBLE_ELEMENT_COUNT, 175);
@@ -53,7 +53,9 @@ test("matter meshes receive mobile-safe 3D profiles with palette-safe output", (
   new THREE.Scene().add(mesh);
   assert.equal(mesh.userData.visualProfile, "solid");
   assert.equal(mesh.userData.canonicalPalette, true);
-  assert.equal(mesh.geometry.type, "RoundedBoxGeometry");
+  assert.equal(mesh.geometry.constructor.name, "RoundedBoxGeometry");
+  assert.equal(mesh.geometry.index, null);
+  assert.ok(mesh.geometry.attributes.position.count > 24);
   assert.equal(mesh.material.toneMapped, false);
 });
 
