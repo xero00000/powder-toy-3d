@@ -1,0 +1,498 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="theme-color" content="#05080d" />
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; connect-src 'self' ws:;" />
+    <meta
+      name="description"
+      content="Powder Toy 3D — a cinematic volumetric falling-sand physics sandbox."
+    />
+    <title>Powder Toy 3D — Volumetric Matter Lab</title>
+  </head>
+  <body>
+    <div id="app" class="app-shell">
+      <div class="atmosphere" aria-hidden="true"></div>
+
+      <header class="topbar glass-panel">
+        <div class="brand-lockup">
+          <div class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </div>
+          <div>
+            <div class="eyebrow">Volumetric matter lab</div>
+            <h1>POWDER<span>³</span></h1>
+          </div>
+        </div>
+
+        <div class="sim-status" aria-live="polite">
+          <span id="statusDot" class="status-dot"></span>
+          <div>
+            <span id="statusLabel">SIMULATION LIVE</span>
+            <small id="tickLabel">TICK 000000</small>
+          </div>
+        </div>
+
+        <nav class="top-actions" aria-label="Simulation actions">
+          <button id="undoButton" class="icon-button" type="button" title="Undo last edit (Ctrl+Z)">
+            <span class="button-icon">↶</span><span class="button-label">Undo</span>
+          </button>
+          <button id="saveButton" class="icon-button" type="button" title="Save chamber (Ctrl+S)">
+            <span class="button-icon">⇩</span><span class="button-label">Save</span>
+          </button>
+          <button id="loadButton" class="icon-button" type="button" title="Load chamber (Ctrl+O)">
+            <span class="button-icon">⇧</span><span class="button-label">Load</span>
+          </button>
+          <button id="communityButton" class="icon-button" type="button" title="Browse official Powder Toy community saves">
+            <span class="button-icon">◉</span><span class="button-label">Community</span>
+          </button>
+          <button id="notificationsButton" class="icon-button notice-button" type="button" title="Official message of the day and notifications">
+            <span class="button-icon">!</span><span class="button-label">Notices</span><span id="notificationBadge" class="notification-badge" hidden>0</span>
+          </button>
+          <button id="stampButton" class="icon-button" type="button" title="Open persistent stamp library">
+            <span class="button-icon">▦</span><span class="button-label">Stamps</span>
+          </button>
+          <button id="consoleButton" class="icon-button" type="button" title="Open simulation console (`)">
+            <span class="button-icon">›_</span><span class="button-label">Console</span>
+          </button>
+          <button id="settingsButton" class="icon-button" type="button" title="Simulation settings">
+            <span class="button-icon">⚙</span><span class="button-label">Settings</span>
+          </button>
+          <input id="loadInput" type="file" accept=".pt3d,.ops,.cps,.stm,application/json,application/octet-stream" hidden />
+          <button id="audioButton" class="icon-button" type="button" title="Toggle procedural soundscape">
+            <span class="button-icon">◖</span><span class="button-label">Audio off</span>
+          </button>
+          <button id="fullscreenButton" class="icon-button" type="button" title="Toggle fullscreen">
+            <span class="button-icon corners-icon"></span><span class="button-label">Fullscreen</span>
+          </button>
+        </nav>
+      </header>
+
+      <aside class="material-panel glass-panel" aria-label="Material palette">
+        <div class="panel-heading">
+          <div>
+            <span class="eyebrow">Matter library</span>
+            <h2 id="libraryTitle">Elements</h2>
+          </div>
+          <span id="elementCountBadge" class="element-count-badge">175 ELEMENTS</span>
+        </div>
+        <label class="element-search">
+          <span aria-hidden="true">⌕</span>
+          <input id="elementSearch" type="search" placeholder="Search all elements…" autocomplete="off" aria-label="Search all elements" />
+          <kbd>E</kbd>
+        </label>
+        <div id="libraryModeTabs" class="library-mode-tabs" role="tablist" aria-label="Palette type">
+          <button class="active" type="button" data-library-mode="elements">Elements</button>
+          <button type="button" data-library-mode="walls">Walls</button>
+          <button type="button" data-library-mode="tools">Tools</button>
+          <button type="button" data-library-mode="life">Life</button>
+          <button type="button" data-library-mode="decorations">Decor</button>
+          <button type="button" data-library-mode="properties">Prop</button>
+        </div>
+        <div id="decorationControls" class="decoration-controls" hidden>
+          <label title="Decoration RGB colour"><span>Colour</span><input id="decorationColor" type="color" value="#c86432" /></label>
+          <label title="Decoration opacity"><span>Alpha <b id="decorationAlphaLabel">255</b></span><input id="decorationAlpha" type="range" min="0" max="255" value="255" /></label>
+        </div>
+        <div id="propertyControls" class="property-controls" hidden>
+          <label><span>Particle field</span><select id="propertyField" aria-label="Particle property"></select></label>
+          <label><span>Value</span><input id="propertyValue" type="text" value="22" spellcheck="false" aria-label="Particle property value" /></label>
+          <small id="propertyHint">Particle temperature · accepts C, K or F</small>
+        </div>
+        <div id="categoryTabs" class="category-tabs" role="tablist"></div>
+        <div id="materialGrid" class="material-grid"></div>
+        <div id="materialInfo" class="material-info">
+          <div class="material-swatch"></div>
+          <div>
+            <strong>Sand</strong>
+            <span>Heavy granular solid</span>
+          </div>
+        </div>
+      </aside>
+
+      <main id="viewport" class="viewport" aria-label="3D simulation viewport">
+        <canvas id="scene" tabindex="0"></canvas>
+        <div class="viewport-vignette" aria-hidden="true"></div>
+        <div class="viewport-grain" aria-hidden="true"></div>
+
+        <div class="view-readout glass-chip" aria-hidden="true">
+          <span class="reticle-mini"></span>
+          <span>CHAMBER A-01</span>
+          <i></i>
+          <span id="cameraReadout">PERSPECTIVE / 48×36×28</span>
+        </div>
+
+        <div id="brushHud" class="brush-hud glass-chip">
+          <span id="brushColor" class="brush-color"></span>
+          <div><small>ACTIVE MATTER</small><strong id="brushMaterial">SAND</strong></div>
+          <i></i>
+          <div><small>BRUSH</small><strong id="brushSize">Ø 5</strong></div>
+          <i></i>
+          <div><small>DEPTH</small><strong id="brushDepth">Z 14</strong></div>
+        </div>
+
+        <div id="toast" class="toast" role="status"></div>
+
+        <div id="loading" class="loading-screen">
+          <div class="loading-orbit"><i></i><i></i><i></i></div>
+          <span>INITIALIZING MATTER ENGINE</span>
+          <div class="loading-track"><b></b></div>
+        </div>
+      </main>
+
+      <aside class="inspector-panel glass-panel" aria-label="Simulation telemetry and presets">
+        <section>
+          <div class="panel-heading compact">
+            <div><span class="eyebrow">Live telemetry</span><h2>Chamber</h2></div>
+            <span id="fpsBadge" class="fps-badge">60 FPS</span>
+          </div>
+          <div class="telemetry-grid">
+            <div class="telemetry-card">
+              <span>Active cells</span>
+              <strong id="particleCount">0</strong>
+              <div class="sparkline"><i id="particleSpark"></i></div>
+            </div>
+            <div class="telemetry-card hot">
+              <span>Peak temp</span>
+              <strong id="temperatureReadout">22°C</strong>
+              <div class="sparkline"><i id="heatSpark"></i></div>
+            </div>
+            <div class="telemetry-card pressure">
+              <span>Peak pressure</span>
+              <strong id="pressureReadout">0.00</strong>
+              <div class="sparkline"><i id="pressureSpark"></i></div>
+            </div>
+            <div class="telemetry-card flow">
+              <span>Air velocity</span>
+              <strong id="airVelocityReadout">0.00</strong>
+              <div class="sparkline"><i id="airVelocitySpark"></i></div>
+            </div>
+            <div class="telemetry-card gravity wide">
+              <span>Newtonian gravity</span>
+              <strong id="gravityReadout">0.00 G</strong>
+              <div class="sparkline"><i id="gravitySpark"></i></div>
+            </div>
+            <div class="telemetry-card wide">
+              <span>Engine load</span>
+              <strong id="loadReadout">0%</strong>
+              <div class="load-track"><i id="loadBar"></i></div>
+            </div>
+          </div>
+        </section>
+
+        <section class="visibility-control">
+          <div class="section-title"><span>Visual clarity</span><strong id="exposureLabel">230%</strong></div>
+          <input id="exposureSlider" type="range" min="80" max="280" value="230" aria-label="Scene brightness" />
+          <div id="viewModeButtons" class="view-mode-buttons" role="group" aria-label="Rendering style">
+            <button class="active" type="button" data-view-mode="clarity"><strong>Clarity</strong><small>Bright lab</small></button>
+            <button type="button" data-view-mode="cinematic"><strong>Cinema</strong><small>Deep contrast</small></button>
+            <button type="button" data-view-mode="xray"><strong>X-ray</strong><small>See through</small></button>
+            <button type="button" data-view-mode="heat"><strong>Heat</strong><small>Thermal field</small></button>
+            <button type="button" data-view-mode="pressure"><strong>Pressure</strong><small>Air stress</small></button>
+            <button type="button" data-view-mode="velocity"><strong>Flow</strong><small>Air speed</small></button>
+            <button type="button" data-view-mode="gravity"><strong>Gravity</strong><small>Force field</small></button>
+            <button type="button" data-view-mode="basic"><strong>Basic</strong><small>Flat color</small></button>
+            <button type="button" data-view-mode="fancy"><strong>Fancy</strong><small>Bloom FX</small></button>
+            <button type="button" data-view-mode="fire"><strong>Fire</strong><small>Emission only</small></button>
+            <button type="button" data-view-mode="blob"><strong>Blob</strong><small>Fused matter</small></button>
+            <button type="button" data-view-mode="persistent"><strong>Trails</strong><small>Persistence</small></button>
+            <button type="button" data-view-mode="gradient"><strong>Gradient</strong><small>Depth spectrum</small></button>
+            <button type="button" data-view-mode="life"><strong>Life</strong><small>Cell focus</small></button>
+            <button type="button" data-view-mode="air"><strong>Air</strong><small>Pressure + flow</small></button>
+          </div>
+        </section>
+
+        <section class="section-control">
+          <div class="section-title"><span>Interaction plane</span><strong id="depthLabel">14 / 27</strong></div>
+          <input id="depthSlider" type="range" min="0" max="27" value="14" aria-label="Interaction depth" />
+          <div class="depth-scale"><span>BACK</span><i></i><span>FRONT</span></div>
+          <button id="sectionButton" class="wide-button active" type="button">
+            <span class="section-icon"></span>
+            <span><strong>Section cut</strong><small>Reveal chamber interior</small></span>
+            <b>ON</b>
+          </button>
+        </section>
+
+        <section class="presets-section">
+          <div class="section-title"><span>Scenario protocols</span><small>LOAD PRESET</small></div>
+          <div id="presetList" class="preset-list"></div>
+        </section>
+
+        <section class="hint-card">
+          <span class="mouse-diagram" aria-hidden="true"><i></i><i></i></span>
+          <div><strong>Shape the experiment</strong><small>LMB paint · RMB orbit · wheel resize · Ctrl+C/X/V clipboard</small></div>
+        </section>
+      </aside>
+
+      <footer class="control-deck glass-panel">
+        <div class="transport-controls">
+          <button id="resetButton" class="deck-button" type="button" title="Reset current scenario (R)"><span>↺</span><small>RESET</small></button>
+          <button id="pauseButton" class="primary-deck-button" type="button" title="Pause simulation (Space)"><span class="pause-glyph">Ⅱ</span><small>PAUSE</small></button>
+          <button id="stepButton" class="deck-button" type="button" title="Advance one frame (F)"><span>▷|</span><small>STEP</small></button>
+        </div>
+
+        <div class="brush-control">
+          <div class="control-label"><span>Brush radius</span><strong id="radiusLabel">2 CELLS</strong></div>
+          <div class="radius-row">
+            <button id="radiusDown" type="button" aria-label="Decrease brush radius">−</button>
+            <input id="radiusSlider" type="range" min="1" max="6" value="2" aria-label="Brush radius" />
+            <button id="radiusUp" type="button" aria-label="Increase brush radius">+</button>
+          </div>
+          <select id="brushShape" aria-label="Brush shape">
+            <option value="sphere">Sphere</option>
+            <option value="disc">Plane disc</option>
+            <option value="cube">Cube</option>
+            <option value="diamond">Diamond</option>
+          </select>
+        </div>
+
+        <div class="deck-divider"></div>
+
+        <div id="drawModeButtons" class="draw-mode-control" role="group" aria-label="Brush shape and editing mode">
+          <button class="active" type="button" data-draw-mode="brush" title="Freehand brush (B)"><strong>●</strong><small>BRUSH</small></button>
+          <button type="button" data-draw-mode="line" title="Straight line (L)"><strong>╱</strong><small>LINE</small></button>
+          <button type="button" data-draw-mode="box" title="Filled box (U)"><strong>□</strong><small>BOX</small></button>
+          <button type="button" data-draw-mode="flood" title="Flood fill plane (G)"><strong>▨</strong><small>FILL</small></button>
+          <button type="button" data-draw-mode="sample" title="Sample particle or wall (I)"><strong>⌾</strong><small>PICK</small></button>
+          <button type="button" data-draw-mode="replace" title="Replace matching cells on plane (P)"><strong>⇄</strong><small>REPLACE</small></button>
+          <button type="button" data-draw-mode="select" title="Select region for copy, cut and paste (M)"><strong>⌗</strong><small>SELECT</small></button>
+          <button type="button" data-draw-mode="sign" title="Place or edit a sign (N)"><strong>▰</strong><small>SIGN</small></button>
+        </div>
+
+        <button id="eraseButton" class="mode-button" type="button">
+          <span class="eraser-icon"></span>
+          <span><small>TOOL</small><strong>ERASE</strong></span>
+          <kbd>X</kbd>
+        </button>
+        <button id="cameraButton" class="mode-button" type="button">
+          <span class="camera-icon"></span>
+          <span><small>VIEW</small><strong>RESET CAMERA</strong></span>
+          <kbd>C</kbd>
+        </button>
+
+        <div class="credits-mini">
+          <span>INSPIRED BY</span>
+          <a href="https://github.com/The-Powder-Toy/The-Powder-Toy" target="_blank" rel="noreferrer">THE POWDER TOY ↗</a>
+        </div>
+      </footer>
+
+      <div id="luaUiLayer" class="lua-ui-layer" aria-live="polite"></div>
+      <div id="notificationsDialog" class="notifications-dialog" hidden>
+        <section class="notifications-dialog-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="notificationsDialogTitle">
+          <div class="panel-heading compact">
+            <div><span class="eyebrow">Official Powder Toy network</span><h2 id="notificationsDialogTitle">News &amp; notifications</h2></div>
+            <div class="notifications-heading-actions"><button id="refreshNotifications" type="button">Refresh</button><button id="closeNotificationsDialog" class="icon-button" type="button" aria-label="Close notifications">×</button></div>
+          </div>
+          <section class="notifications-motd"><span class="eyebrow">Message of the day</span><p id="messageOfTheDay">Fetching the message of the day…</p></section>
+          <div class="notifications-subhead"><span id="notificationsStatus">CONTACTING POWDERTOY.CO.UK…</span></div>
+          <div id="notificationsList" class="notifications-list" aria-live="polite"></div>
+          <section id="officialUpdates" class="official-updates" hidden><span class="eyebrow">Official builds</span><div id="officialUpdatesList"></div></section>
+        </section>
+      </div>
+      <div id="communityDialog" class="community-dialog" hidden>
+        <section class="community-dialog-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="communityDialogTitle">
+          <header class="community-header">
+            <div><span class="eyebrow">Official Powder Toy network</span><h2 id="communityDialogTitle">Community saves</h2></div>
+            <div class="community-account-actions">
+              <span id="communityAccountLabel">READ-ONLY GUEST</span>
+              <button id="communityProfileToggle" type="button" hidden>Profile</button>
+              <button id="communityUploadToggle" type="button">Publish</button>
+              <button id="communityLoginToggle" type="button">Sign in</button>
+              <button id="closeCommunityDialog" class="icon-button" type="button" aria-label="Close community browser">×</button>
+            </div>
+          </header>
+
+          <form id="communityLoginForm" class="community-login-form" hidden>
+            <label><span>Username</span><input id="communityUsername" type="text" maxlength="64" autocomplete="username" required /></label>
+            <label><span>Password</span><input id="communityPassword" type="password" maxlength="512" autocomplete="current-password" required /></label>
+            <button type="submit">Sign in securely</button>
+            <small>Password is sent only for this login and is never stored. <a href="https://powdertoy.co.uk/Register.html" target="_blank" rel="noreferrer">Register an account ↗</a></small>
+          </form>
+          <form id="communityUploadForm" class="community-upload-form" hidden>
+            <div class="community-upload-heading"><strong>Upload current chamber</strong><small>The official server is 2D. Export one interaction slice or a tiled atlas of every depth layer.</small></div>
+            <label><span>Name</span><input id="communityUploadName" type="text" maxlength="64" required placeholder="Simulation name" /></label>
+            <label><span>Description</span><textarea id="communityUploadDescription" maxlength="1024" rows="2" placeholder="Describe the simulation"></textarea></label>
+            <label><span>Projection</span><select id="communityUploadMode"><option value="slice">Current depth slice</option><option value="atlas">All-depth slice atlas</option></select></label>
+            <label class="community-upload-publish"><input id="communityUploadPublished" type="checkbox" /><span>Publish publicly</span></label>
+            <div class="community-upload-actions"><button id="communityPrepareUpload" type="button">Validate OPS</button><button id="communityUploadSubmit" type="submit">Upload</button></div>
+            <output id="communityUploadReport">NOT YET VALIDATED</output>
+          </form>
+
+          <div id="communityBrowseView" class="community-browse-view">
+            <form id="communitySearchForm" class="community-search-form" role="search">
+              <label><span aria-hidden="true">⌕</span><input id="communitySearch" type="search" maxlength="180" placeholder="Search saves, user:author, id:123…" autocomplete="off" /></label>
+              <select id="communitySort" aria-label="Sort community saves"><option value="votes">Top rated</option><option value="date">Newest</option></select>
+              <select id="communityPeriod" aria-label="Community save period"><option value="all">All time</option><option value="today">Today</option><option value="week">This week</option><option value="month">This month</option><option value="year">This year</option></select>
+              <select id="communityScope" aria-label="Community save scope"><option value="all">All saves</option><option value="mine">My saves</option><option value="favourites">Favourites</option></select>
+              <button type="submit">Search</button>
+            </form>
+            <div class="community-subhead"><span id="communityResultLabel">CONNECTING TO POWDERTOY.CO.UK…</span><button id="communityRefresh" type="button">Refresh</button></div>
+            <div id="communitySaveGrid" class="community-save-grid" aria-live="polite"></div>
+            <nav class="community-pagination" aria-label="Community save pages">
+              <button id="communityPrevious" type="button">← Previous</button><span id="communityPageLabel">PAGE 1</span><button id="communityNext" type="button">Next →</button>
+            </nav>
+          </div>
+
+          <article id="communityDetailView" class="community-detail-view" hidden>
+            <div class="community-detail-toolbar"><button id="communityBack" type="button">← Browse</button><span id="communityDetailId">SAVE #0</span></div>
+            <div class="community-detail-layout">
+              <div class="community-preview-column">
+                <img id="communityDetailImage" alt="Community save preview" />
+                <div class="community-primary-actions">
+                  <button id="communityLoadSave" type="button">Load in 3D</button>
+                  <a id="communityOpenWebsite" href="https://powdertoy.co.uk" target="_blank" rel="noreferrer">Open original ↗</a>
+                </div>
+                <div id="communityVoteActions" class="community-vote-actions" hidden>
+                  <button type="button" data-community-vote="1">▲ Upvote</button><button type="button" data-community-vote="-1">▼ Downvote</button><button type="button" data-community-vote="0">Reset</button><button id="communityFavourite" type="button">☆ Favourite</button><button id="communityReportToggle" type="button">⚑ Report</button>
+                </div>
+                <form id="communityReportForm" class="community-report-form" hidden>
+                  <strong>Report this save</strong>
+                  <small>For stolen saves, include the original save ID. Reports may also cover comments or tags. Do not report a front-page save unless it breaks the rules.</small>
+                  <textarea id="communityReportReason" maxlength="4096" rows="4" placeholder="Reason for reporting…" required></textarea>
+                  <div><button type="submit">Submit report</button><button id="communityReportCancel" type="button">Cancel</button></div>
+                </form>
+                <div id="communityOwnerActions" class="community-owner-actions" hidden>
+                  <button id="communityPublishSave" type="button">Publish save</button><button id="communityUnpublishSave" type="button">Unpublish save</button><button id="communityDeleteSave" class="danger" type="button">Delete save</button>
+                </div>
+              </div>
+              <div class="community-metadata-column">
+                <h3 id="communityDetailName">Loading…</h3>
+                <button id="communityAuthorProfile" class="community-author-profile" type="button">View author profile</button>
+                <div id="communityDetailMeta" class="community-detail-meta"></div>
+                <p id="communityDetailDescription"></p>
+                <div id="communityDetailTags" class="community-detail-tags"></div>
+                <form id="communityTagForm" class="community-tag-form" hidden><input id="communityTagText" type="text" maxlength="48" placeholder="Tag" required /><button type="submit" data-tag-operation="add">Add tag</button><button type="submit" data-tag-operation="delete">Remove</button></form>
+                <section class="community-comments-section">
+                  <div class="community-subhead"><span id="communityCommentsLabel">COMMENTS</span></div>
+                  <div id="communityComments" class="community-comments"></div>
+                  <form id="communityCommentForm" class="community-comment-form" hidden><textarea id="communityCommentText" maxlength="4096" rows="3" placeholder="Add a comment…" required></textarea><button type="submit">Post comment</button></form>
+                </section>
+              </div>
+            </div>
+          </article>
+          <article id="communityProfileView" class="community-profile-view" hidden>
+            <div class="community-detail-toolbar"><button id="communityProfileBack" type="button">← Back</button><span>OFFICIAL USER PROFILE</span></div>
+            <div class="community-profile-layout">
+              <aside class="community-profile-identity">
+                <img id="communityProfileAvatar" alt="Community user avatar" />
+                <h3 id="communityProfileName">Loading…</h3>
+                <p id="communityProfileLocation">Location not provided</p>
+                <a id="communityProfileWebsite" target="_blank" rel="noreferrer">Visit website ↗</a>
+              </aside>
+              <div class="community-profile-content">
+                <div id="communityProfileStats" class="community-profile-stats"></div>
+                <section><span class="eyebrow">Biography</span><p id="communityProfileBiography">No biography provided.</p></section>
+                <form id="communityProfileForm" class="community-profile-form" hidden>
+                  <label><span>Location</span><input id="communityProfileLocationInput" type="text" maxlength="40" /></label>
+                  <label><span>Biography</span><textarea id="communityProfileBiographyInput" maxlength="20000" rows="8"></textarea></label>
+                  <button type="submit">Save profile</button>
+                  <a href="https://powdertoy.co.uk/Profile/Avatar.html" target="_blank" rel="noreferrer">Edit avatar on powdertoy.co.uk ↗</a>
+                </form>
+              </div>
+            </div>
+          </article>
+          <div id="communityBusy" class="community-busy" hidden><i></i><span>Contacting the official server…</span></div>
+        </section>
+      </div>
+      <div id="stampDialog" class="stamp-dialog" hidden>
+        <div class="stamp-dialog-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="stampDialogTitle">
+          <div class="panel-heading compact">
+            <div><span class="eyebrow">Persistent local library</span><h2 id="stampDialogTitle">Stamps</h2></div>
+            <button id="closeStampDialog" class="icon-button" type="button" aria-label="Close stamp library">×</button>
+          </div>
+          <div class="stamp-create-row">
+            <input id="stampName" type="text" maxlength="40" placeholder="Stamp name" />
+            <button id="saveStampButton" type="button">Save selection</button>
+          </div>
+          <div id="stampList" class="stamp-list"></div>
+        </div>
+      </div>
+      <div id="consoleDialog" class="console-dialog" hidden>
+        <div class="console-dialog-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="consoleDialogTitle">
+          <div class="panel-heading compact console-heading">
+            <div><span class="eyebrow">Commands + sandboxed Lua 5.3</span><h2 id="consoleDialogTitle">Console</h2></div>
+            <div class="console-tabs" role="tablist" aria-label="Lua tools">
+              <button id="consoleTab" class="active" type="button" role="tab" aria-selected="true">Console</button>
+              <button id="scriptsTab" type="button" role="tab" aria-selected="false">Scripts</button>
+            </div>
+            <button id="closeConsoleDialog" class="icon-button" type="button" aria-label="Close console and script manager">×</button>
+          </div>
+          <section id="consolePane" class="console-pane">
+            <div id="consoleOutput" class="console-output" role="log" aria-live="polite"><p class="console-system">Powder³ console ready · commands and stateful Lua · type <strong>help</strong></p></div>
+            <form id="consoleForm" class="console-command-row">
+              <span aria-hidden="true">›</span>
+              <input id="consoleInput" type="text" autocomplete="off" spellcheck="false" aria-label="Console command or Lua statement" placeholder="= sim.partProperty(42, 'temp')" />
+              <button type="submit">Run</button>
+            </form>
+          </section>
+          <section id="scriptManagerPane" class="script-manager-pane" hidden>
+            <aside class="script-library-column">
+              <div class="script-library-actions">
+                <button id="newLuaScript" type="button">+ New</button>
+                <button id="importLuaScript" type="button">Import</button>
+                <input id="luaScriptInput" type="file" accept=".lua,text/plain" multiple hidden />
+              </div>
+              <div id="luaScriptList" class="lua-script-list" role="listbox" aria-label="Local Lua scripts"></div>
+              <small>Private local sandbox · 256 KiB total</small>
+            </aside>
+            <div class="script-editor-column">
+              <div class="script-editor-toolbar">
+                <input id="luaScriptName" type="text" maxlength="76" spellcheck="false" aria-label="Lua script filename" placeholder="experiment.lua" />
+                <label><input id="luaScriptAutorun" type="checkbox" /><span>Run on startup</span></label>
+              </div>
+              <textarea id="luaScriptEditor" spellcheck="false" aria-label="Lua script source" placeholder="-- Powder³ Lua 5.3&#10;print('Matter engine online')"></textarea>
+              <div class="script-editor-footer">
+                <small id="luaScriptStatus" role="status">Select a script or create a new one.</small>
+                <button id="deleteLuaScript" class="danger" type="button">Delete</button>
+                <button id="exportLuaScript" type="button">Export</button>
+                <button id="saveLuaScript" type="button">Save</button>
+                <button id="runLuaScript" class="primary" type="button">Run script</button>
+              </div>
+            </div>
+          </section>
+        </div>
+      </div>
+      <div id="signDialog" class="sign-dialog" hidden>
+        <form id="signForm" class="sign-dialog-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="signDialogTitle">
+          <div class="panel-heading compact">
+            <div><span class="eyebrow">Dynamic chamber annotation</span><h2 id="signDialogTitle">Edit sign</h2></div>
+            <button id="closeSignDialog" class="icon-button" type="button" aria-label="Close sign editor">×</button>
+          </div>
+          <small id="signCoordinate">CELL 0,0,0</small>
+          <label><span>Text</span><input id="signText" type="text" maxlength="96" autocomplete="off" placeholder="Core {temp}°C · {pres} pressure" /></label>
+          <div class="sign-options-row">
+            <label><span>Alignment</span><select id="signJustification"><option value="left">Left</option><option value="center">Center</option><option value="right">Right</option></select></label>
+            <label><span>Colour</span><input id="signColor" type="color" value="#8feeff" /></label>
+          </div>
+          <p>Live fields: <code>{temp}</code> <code>{pres}</code> <code>{aheat}</code> <code>{type}</code> <code>{ctype}</code> <code>{life}</code> <code>{tmp}</code> <code>{tmp2}</code></p>
+          <div class="sign-actions"><button id="deleteSignButton" type="button">Delete sign</button><button type="submit">Save sign</button></div>
+        </form>
+      </div>
+      <div id="settingsDialog" class="settings-dialog" hidden>
+        <form id="settingsForm" class="settings-dialog-card glass-panel" role="dialog" aria-modal="true" aria-labelledby="settingsDialogTitle">
+          <div class="panel-heading compact">
+            <div><span class="eyebrow">Upstream simulation controls</span><h2 id="settingsDialogTitle">Physics settings</h2></div>
+            <button id="closeSettingsDialog" class="icon-button" type="button" aria-label="Close settings">×</button>
+          </div>
+          <label class="settings-check"><input id="heatSimulationSetting" type="checkbox" checked /><span>Particle heat simulation</span></label>
+          <label class="settings-check"><input id="newtonianGravitySetting" type="checkbox" checked /><span>Newtonian gravity field</span></label>
+          <label class="settings-check"><input id="waterEqualizationSetting" type="checkbox" /><span>Liquid level equalization</span></label>
+          <label><span>Gravity mode</span><select id="gravityModeSetting"><option value="0">Vertical</option><option value="1">Off</option><option value="2">Radial</option><option value="3">Custom 3D vector</option></select></label>
+          <fieldset><legend>Custom gravity vector</legend><label><span>X</span><input id="gravityXSetting" type="number" step="0.05" value="0" /></label><label><span>Y</span><input id="gravityYSetting" type="number" step="0.05" value="-1" /></label><label><span>Z</span><input id="gravityZSetting" type="number" step="0.05" value="0" /></label></fieldset>
+          <label><span>Air simulation</span><select id="airModeSetting"><option value="0">On</option><option value="1">Pressure off</option><option value="2">Velocity off</option><option value="3">Off</option><option value="4">No update / frozen</option></select></label>
+          <label><span>Chamber edges</span><select id="edgeModeSetting"><option value="0">Void / delete</option><option value="1">Solid</option><option value="2">Loop / wrap</option></select></label>
+          <label><span>Ambient temperature °C</span><input id="ambientTemperatureSetting" type="number" min="-273.15" max="9725.85" step="0.1" value="22" /></label>
+          <label><span>Ambient edge pressure</span><input id="edgePressureSetting" type="number" min="-256" max="256" step="0.1" value="0" /></label>
+          <fieldset><legend>Ambient edge velocity</legend><label><span>X</span><input id="edgeVelocityXSetting" type="number" min="-32" max="32" step="0.05" value="0" /></label><label><span>Y</span><input id="edgeVelocityYSetting" type="number" min="-32" max="32" step="0.05" value="0" /></label><label><span>Z</span><input id="edgeVelocityZSetting" type="number" min="-32" max="32" step="0.05" value="0" /></label></fieldset>
+          <label><span>Vorticity confinement</span><input id="vorticitySetting" type="number" min="0" max="1" step="0.01" value="0.1" /></label>
+          <label><span>Air heat convection</span><select id="convectionModeSetting"><option value="0">None</option><option value="1">Legacy</option><option value="2">Boussinesq</option></select></label>
+          <label><span>Decoration colour space</span><select id="decorationColorSpaceSetting"><option value="0">sRGB</option><option value="1">Linear</option><option value="2">Gamma 2.2</option><option value="3">Gamma 1.8</option></select></label>
+          <label class="settings-check"><input id="ambientHeatSetting" type="checkbox" checked /><span>Ambient heat exchange</span></label>
+          <label class="settings-check"><input id="startupNotificationsSetting" type="checkbox" checked /><span>Fetch MotD and notifications at startup</span></label>
+          <button class="settings-apply" type="submit">Apply physics settings</button>
+        </form>
+      </div>
+    </div>
+    <script type="module" src="/src/main.js"></script>
+  </body>
+</html>

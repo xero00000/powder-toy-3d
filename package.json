@@ -1,0 +1,25 @@
+{
+  "name": "powder-toy-3d",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "GPL-3.0-or-later",
+  "scripts": {
+    "dev": "vite --host 0.0.0.0",
+    "build": "vite build",
+    "preview": "vite preview --host 0.0.0.0",
+    "test": "node --test tests/*.test.js",
+    "benchmark": "node scripts/benchmark-simulation.mjs",
+    "audit:saves": "node scripts/audit-save-corpus.mjs",
+    "audit:parity": "node scripts/audit-parity.mjs"
+  },
+  "dependencies": {
+    "compressjs": "1.0.3",
+    "fengari": "0.1.5",
+    "seek-bzip": "^2.0.0",
+    "three": "^0.178.0"
+  },
+  "devDependencies": {
+    "vite": "^7.0.5"
+  }
+}
