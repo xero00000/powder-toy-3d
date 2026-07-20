@@ -12,7 +12,7 @@ import {
 import { paletteVisibilityMultiplier } from "../src/color-presentation.js";
 import { VoxelSimulation } from "../src/simulation.js";
 
- test("the complete June 2026 upstream element ID space is registered", () => {
+test("the complete June 2026 upstream element ID space is registered", () => {
   assert.equal(UPSTREAM_ELEMENT_COUNT, 195);
   assert.equal(MATERIALS.length, 195);
   assert.equal(UPSTREAM_VISIBLE_ELEMENT_COUNT, 175);
@@ -57,6 +57,31 @@ test("matter meshes receive mobile-safe 3D profiles with palette-safe output", (
   assert.equal(mesh.geometry.index, null);
   assert.ok(mesh.geometry.attributes.position.count > 24);
   assert.equal(mesh.material.toneMapped, false);
+});
+
+test("the chamber installs camera-relative key, fill and rim lighting", () => {
+  const scene = new THREE.Scene();
+  const ambient = new THREE.HemisphereLight(0xe6f9ff, 0x547487, 4.8);
+  const key = new THREE.DirectionalLight(0xf4fdff, 6.2);
+  const rim = new THREE.DirectionalLight(0x7ca5ff, 4.1);
+  scene.add(ambient, key, rim);
+
+  const rig = scene.userData.threePointLighting;
+  assert.ok(rig);
+  assert.equal(rig.cameraRelative, true);
+  assert.equal(rig.key, key);
+  assert.equal(rig.rim, rim);
+  assert.equal(rig.fill.name, "MatterFillLight");
+  assert.equal(rig.fill.color.getHex(), 0xd9edff);
+
+  const camera = new THREE.PerspectiveCamera();
+  camera.position.set(35, 15, 57);
+  scene.onBeforeRender(null, scene, camera);
+  assert.equal(rig.key.intensity, 6.4);
+  assert.equal(rig.fill.intensity, 4.5);
+  assert.equal(rig.rim.intensity, 3.65);
+  assert.ok(rig.fill.position.distanceTo(rig.key.position) > 1);
+  assert.ok(rig.rim.position.distanceTo(rig.fill.position) > 1);
 });
 
 test("the complete upstream tool, wall and built-in Life registries are synchronized", () => {
